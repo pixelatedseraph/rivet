@@ -136,21 +136,23 @@ impl Lexer{
                     self.index+=1;
                 }
                 '=' => {
+                    revo_as_chars.next();
                     if let Some(&ch) = revo_as_chars.peek(){
-                        if ch == '='{
-                            self.tokens.push(Token::DoubleEq);
-                            revo_as_chars.next();
-                            self.index+=1;
-                        }
-                        else if ch == '>'{
-                            self.tokens.push(Token::Arrow);
-                            revo_as_chars.next();
-                            self.index+=1;
-                        }
-                        else{
-                            self.tokens.push(Token::Eq);
-                            revo_as_chars.next();
-                            self.index+=1;
+                        match ch {
+                            '=' => {
+                                self.tokens.push(Token::DoubleEq);
+                                revo_as_chars.next();
+                                self.index +=1;
+                            }
+                            '>' =>{
+                                self.tokens.push(Token::Arrow);
+                                revo_as_chars.next();
+                                self.index +=1;
+                            }
+                            _ => {
+                                self.tokens.push(Token::Eq);
+                                self.index+=1;
+                            }
                         }
                     }
                 }

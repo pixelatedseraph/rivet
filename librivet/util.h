@@ -1,11 +1,13 @@
 /*
   *  Author: Mazeed .A
   *  SPDX identifier: AGPL v3
-  *  About: Runtime C util's for revo backend dump 
+  *  About: Runtime C utility layer for revo backend dump 
 */
 
+//Fair Warning: 
+//The following source code isnt for faint of heart as it is extremely macro heavy & confusing!
 
-
+//upcoming types: rutil_map & rutil_string
 
 #include <stddef.h>
 #include <stdio.h>
@@ -56,7 +58,7 @@ char* rutil_error_code_to_str(rutil_error_codes ec){
     exit(CatchableError);   \
 }
 
-#define rutil_for_each_in_c_arr(idx,c_arr) for(usize i = 0 ; i < rutil_array_length(c_arr);++i)
+#define rutil_for_each_in_c_arr(idx,c_arr) for(usize idx = 0 ; idx < rutil_array_length(c_arr);++idx)
 
 #define rutil_monomorphized_array(T) \
     typedef struct{              \
@@ -154,7 +156,7 @@ void rutil_reflect_print_i32(i32 value){
 }
 
 
-#define for_each(idx,vector) for(usize idx = 0; idx < vector->length ;++idx) 
+#define rutil_vec_for_each(idx,vector) for(usize idx = 0; idx < vector->length ;++idx) 
 
 /* Vector Type & API*/
 
@@ -279,8 +281,14 @@ void rutil_reflect_print_i32(i32 value){
     static inline T* vectorFront_##Type(rutil_vector_##T* vector){  \
         return vector->data;    \
     } \
+    static inline T* vectorAt_##Type(rutil_vector_##T* vector,usize idx){  \
+        return vector->data + idx; \
+    }\
     static inline T* vectorBack_##Type(rutil_vector_##T* vector){  \
         return vector->data + (vector->length); \
+    }\
+    static inline T* vectorGetLast_##Type(rutil_vector_##T* vector){  \
+        return vector->data + (vector->length -1); \
     }\
     static inline rutil_vector_##T* filter_##Type(rutil_vector_##T* vector,bool(*predicate)(T)){    \
         rutil_vector_##T* filteredVector = newVector_##Type(); \
@@ -311,6 +319,13 @@ void rutil_reflect_print_i32(i32 value){
         vector->length = 0; \
     }\
     static inline void deleteVector_##Type(rutil_vector_##T** vector){ \
+        free((*vector)->data);  \
+        free(*vector);  \
+    }   \
+    static inline void deleteVectorByDestructor_##Type(rutil_vector_##T** vector,void (*destructor)(T*)){ \
+        rutil_vec_for_each(idx,(*vector)){    \
+            destructor(&(*vector)->data[idx]);  \
+        }   \
         free((*vector)->data);  \
         free(*vector);  \
     }   \
@@ -372,13 +387,10 @@ void rutil_reflect_print_i32(i32 value){
                             sizeof((Type[]){__VA_ARGS__}) / sizeof(Type))
 
 
-i32 square_i32(i32 val){
-    return val * val;
-}                            
+                         
                             
-rutil_monomorphized_array(i32)
-rutil_monomorphized_vector(i32, i32)
-
+//rutil_monomorphized_vector(i32, i32)
+/*
 int main(){
     rutil_vector_i32* vector = newVector_i32();
 
@@ -394,29 +406,30 @@ int main(){
 
     return 0;
 }
-
-/* 
+*/
+/* rutil_monomorphized_array(i32)
 i32 main(){
-    rutil_array_i32* a1 = rutil_array_new_i32(10);
-    rutil_array_push_i32(a1,5,1,2,3,4,5);
+    rutil_array_i32* a1 = array_new_i32(10);
+    array_push_i32(a1,5,1,2,3,4,5);
 
-    rutil_array_print_i32(a1, rutil_reflect_print_i32);
+    array_print_i32(a1, rutil_reflect_print_i32);
 
-    rutil_array_for_each_i32(a1,squaure_i32);
+    array_for_each_i32(a1,square_i32);
 
-    rutil_array_push_i32(a1, 3,80,90,100);
+    array_push_i32(a1, 3,80,90,100);
 
-    rutil_array_print_i32(a1, rutil_reflect_print_i32);
+    array_print_i32(a1, rutil_reflect_print_i32);
 
-    rutil_array_push_i32(a1, 5,1,2,3,4,5);
+    array_push_i32(a1, 5,1,2,3,4,5);
 
-    rutil_array_drop_i32(&a1);
+    array_drop_i32(&a1);
 
     printf("\n");
 
     return 0;
 }
-*/
+    */
+
 /*
 int main(){
     int arr[5];
