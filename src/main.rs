@@ -1,14 +1,14 @@
-use crate::{lexer::Lexer, rtable::{RTable, RTableUnit}};
+use crate::{lexer::Lexer};
 use std::{collections::HashMap, env::args};
 
 mod lexer;
-mod rtable;
-
+mod codegen;
+/* 
 fn main() {
     let cl_args: Vec<_> = args().collect();
 
     if cl_args.len() != 2{
-        panic!("FACKYOU");
+        panic!("HEHE");
     }
 
     let mut lexer = Lexer::new(&cl_args[1]);
@@ -33,3 +33,31 @@ fn main() {
     println!("{:?}",rt.table);
 
 }
+*/
+
+
+fn main(){
+    let mut cg = codegen::CodeGenerator::default();
+
+    cg.map_define("char*","int");
+
+    println!("{}",cg.source);
+
+}
+
+#[cfg(test)]
+mod tests{
+    use super::*;
+
+    #[test]
+    fn test_type_mangler() {
+        assert_eq!(codegen::CodeGenerator::mangle_ptr("int"),"int");
+        assert_eq!(codegen::CodeGenerator::mangle_ptr("char"),"char");
+        assert_eq!(codegen::CodeGenerator::mangle_ptr("Foo"),"Foo");
+        
+        assert_eq!(codegen::CodeGenerator::mangle_ptr("char*"),"charptr");
+        assert_eq!(codegen::CodeGenerator::mangle_ptr("char**"),"charptrptr");
+        assert_eq!(codegen::CodeGenerator::mangle_ptr("char*char"),"charptrchar");
+    }
+}
+

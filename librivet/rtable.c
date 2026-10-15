@@ -8,7 +8,7 @@
 //TypeCasts are inserted accordingly during CodeGen phase
 
 //Supports : Generic<T:Any> Sequence(List),SubTables,Methods(FunctionPointers)
-//Upcoming : Map interface,Cycle Detection(WeakRefrences),Polished API interface
+//Upcoming : Map interface,Cycle Detection(WeakRefrences Or via URTID),Polished API interface
 
 #include<stdio.h>
 #include<string.h>
@@ -48,16 +48,13 @@ void initRTableUnitWith(RTableUnit* rtunit,void* data){
 //RTable only refreneces the allocated data and must not allocate for an object by itself
 //RTable must rely on external Object Constructor and destructor(no implicit allocations)
 
-typedef RTableUnit* RtableUnitPtr ;
-
-rutil_monomorphized_vector(RtableUnitPtr,RT)
-
+rutil_monomorphized_vector(RTableUnit*,RtableUnitPtr)
 typedef rutil_vector_RtableUnitPtr RTable; 
 
-#define rutil_rtable_for_each(rt,itr)                        \
-    RTableUnit** begin = vectorFront_RT((rt));               \
-    RTableUnit** end = vectorBack_RT((rt));                  \
-    for(RTableUnit** itr = begin; itr != end ; ++itr)        \
+#define rutil_rtable_for_each(rt,itr)                                   \
+    RTableUnit** begin = vectorFront_RtableUnitPtr((rt));               \
+    RTableUnit** end = vectorBack_RtableUnitPtr((rt));                  \
+    for(RTableUnit** itr = begin; itr != end ; ++itr)                   \
 
 typedef struct{
     i32  (*add)  (i32,i32);
@@ -90,26 +87,26 @@ i32 main(){
         "Decemeber",
     };
 
-    RTable* rt = newVector_RT();
+    RTable* rt = newVector_RtableUnitPtr();
 
     rutil_for_each_in_c_arr(idx,months){
-        pushBack_RT(rt, newRTableUnitWith(months[idx]));
+        pushBack_RtableUnitPtr(rt, newRTableUnitWith(months[idx]));
     }
 
     rutil_vec_for_each(idx,rt){
         printf("%s\n",(char*)rt->data[idx]->data);
     }
 
-    pushBack_RT(rt,newRTableUnitWith(fn.add));
-    pushBack_RT(rt,newRTableUnitWith(fn.sub));
+    pushBack_RtableUnitPtr(rt,newRTableUnitWith(fn.add));
+    pushBack_RtableUnitPtr(rt,newRTableUnitWith(fn.sub));
 
-    int foo = ((int (*)(int,int))getAtIndex_RT(rt, 12)->data)(100,2);
-    int bar = ((int (*)(int,int))getAtIndex_RT(rt, 13)->data)(200,foo);
+    int foo = ((int (*)(int,int))getAtIndex_RtableUnitPtr(rt, 12)->data)(100,2);
+    int bar = ((int (*)(int,int))getAtIndex_RtableUnitPtr(rt, 13)->data)(200,foo);
     
     printf("%d\n",foo);
 
     //subtable
-    RTable* subrt = newVector_RT();
+    RTable* subrt = newVector_RtableUnitPtr();
     const double fnums[] = {
         3.154,
         2.322,
@@ -118,13 +115,13 @@ i32 main(){
     };
 
     rutil_for_each_in_c_arr(idx, fnums){
-        pushBack_RT(subrt, newRTableUnitWith(&fnums[idx]));
+        pushBack_RtableUnitPtr(subrt, newRTableUnitWith(&fnums[idx]));
     }
     
     //inserting subtable (subrt)  in table (rt) 
-    pushBack_RT(rt,newRTableUnitWith(subrt));
+    pushBack_RtableUnitPtr(rt,newRTableUnitWith(subrt));
 
-    RTableUnit* subtableunit = *vectorGetLast_RT(rt);
+    RTableUnit* subtableunit = *vectorGetLast_RtableUnitPtr(rt);
 
     RTable* srt = (RTable*)subtableunit->data;
 
@@ -133,9 +130,8 @@ i32 main(){
     }
 
 
-
-    deleteVectorByDestructor_RT(&subrt,deleteRTableUnit);
-    deleteVectorByDestructor_RT(&rt,deleteRTableUnit);
+    deleteVectorByDestructor_RtableUnitPtr(&subrt,deleteRTableUnit);
+    deleteVectorByDestructor_RtableUnitPtr(&rt,deleteRTableUnit);
 
     return 0;
 }
