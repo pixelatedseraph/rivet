@@ -7,7 +7,7 @@
 //Fair Warning: 
 //The following source code isnt for faint of heart as it is extremely macro heavy & confusing!
 
-//upcoming types: rutil_map & rutil_string & will modify rutil_array
+//upcoming types: rutil_map & rutil_string & will refactor rutil_array
 
 #include <stddef.h>
 #include <stdio.h>
@@ -164,12 +164,12 @@ void rutil_reflect_print_i32(i32 value){
 
 
 //Problem: If you want to store pointers,you basically need to typedef it 
-// to remove * so the preprocessor doesnt blow up when creating say for instance "rutil_vector_int*" 
+//to remove * so that the preprocessor doesnt blow up when creating lets say for instance "rutil_vector_int*" 
 //solution: use a mangler that automatically substitutes T* to Tptr
 //and also remove T (literal type from struct name,it should be replaced with Type)
 //now instead of a mangler,we can replace _##T in type with _##Type,lets see(path of least resistance)
 //T(raw type literal) is only used for a field in the struct
-//all the functions are generated bt Type Parameter instead
+//all the functions are generated with Type Parameter instead
 //what did it fix? we no longer require typedefs for a T containing *
 //we still need to manually enter the type tho(Emitted by the rivet compiler)!
 //Turns Out Mangler Solution is Incorrect & Complicated
