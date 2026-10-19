@@ -9,7 +9,7 @@ mod codegen;
 
 fn main(){
     let mut rmapwriter = RMapWriter::default();
-    rmapwriter.create_map("testmap", "int", "int");
+    rmapwriter.create_map("testmap", "rutil_string*", "rutil_string*");
     rmapwriter.write_monomorphized_code();
     
     let mut cwriter = codegen::CCodeWriter::default();

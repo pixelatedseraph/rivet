@@ -5,6 +5,7 @@
 #include<stdint.h>
 #include"util.h"
 
+                        return _bucket->data[idx].val;
    int compare_ints(const void* restrict lhs,const void* restrict rhs){
         int _lhs = *(int*)lhs;
         int _rhs = *(int*)rhs;

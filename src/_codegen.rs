@@ -20,14 +20,6 @@
 
 
 // /* 
-// contains_key(key)	Check whether a key exists	contains_key(&K) -> bool
-// remove(key)	Delete an entry	remove(&K)
-// len()	Get the number of entries	len() -> usize
-// is_empty()	Check whether the map is empty	is_empty() -> bool
-// clear()	Remove all entries	clear()
-// collison_detection()
-// capacity()	Return current storage capacity
-// reserve(n)	Ensure space for additional entries
 // get_or_insert(key, value)	Insert only when absent
 // iter()	Iterate over key-value pairs
 // keys()	Iterate over keys

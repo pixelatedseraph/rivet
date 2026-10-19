@@ -7,7 +7,10 @@
 //Fair Warning: 
 //The following source code isnt for faint of heart as it is extremely macro heavy & confusing!
 
-//upcoming types: rutil_map & rutil_string & will refactor rutil_array
+//types supported: rutil_vector(macro) rutil_string(typedef) rutil_map(dynamically created by CodeGen) rutil_array(macro) (all generic) 
+
+//upcoming : robust exception handler & global memory arena allocator instead of malloc(),calloc(),realloc() 
+//something like : memalloc() memzeroalloc() memresizealloc() memmarkunused() 
 
 #include <stddef.h>
 #include <stdio.h>
@@ -401,7 +404,6 @@ void rutil_reflect_print_i32(i32 value){
                             sizeof((Type[]){__VA_ARGS__}) / sizeof(Type))
 
 
-
 static inline u64 rutil_hash(const void *key, usize len){
     const u8 *bytes = (const u8*)key;
     u64 hash = UINT64_C(14695981039346656037);
@@ -413,6 +415,86 @@ static inline u64 rutil_hash(const void *key, usize len){
     return hash;
 }                            
                             
+rutil_monomorphized_vector(char, str)
+
+typedef struct {
+    rutil_vector_str* vec_chars;
+}rutil_string;
+
+static inline
+rutil_string* rutil_string_new(){
+    rutil_string* string = malloc(sizeof(rutil_string));
+    string->vec_chars = newVector_str();
+    return string;
+}
+static inline
+rutil_string* rutil_string_from(char* c_str){
+    rutil_string* string = rutil_string_new();
+    pushBackList_str(string->vec_chars, c_str,strlen(c_str)+1);
+    string->vec_chars->length-=1;
+    return string;
+}
+
+static inline
+void rutil_string_push(rutil_string* string,char ch){
+    pushBack_str(string->vec_chars, ch);
+}
+
+static inline
+void rutil_string_push_str(rutil_string* string,rutil_string* other){
+    pushBackList_str(string->vec_chars, other->vec_chars->data, strlen(other->vec_chars->data)+1);    
+    string->vec_chars->length-=1;
+}
+
+static inline
+int rutil_string_format(rutil_string* string,const char *fmt,...){
+    va_list args, copy;
+    va_start(args, fmt);
+    va_copy(copy, args);
+
+    int n = vsnprintf(NULL, 0, fmt, copy);
+    va_end(copy);
+
+    if (n < 0) {
+        va_end(args);
+        return -1;
+    }
+
+    char *tmp = malloc((size_t)n + 1);
+    if (!tmp) {
+        va_end(args);
+        return -1;
+    }
+
+    vsnprintf(tmp, (size_t)n + 1, fmt, args);
+    va_end(args);
+
+    pushBackList_str(string->vec_chars, tmp, (size_t)n + 1);
+    string->vec_chars->length--;
+
+    free(tmp);
+    return n;
+}
+
+static inline
+int rutil_string_cmp(rutil_string* lhs,rutil_string* rhs){
+   return strcmp(lhs->vec_chars->data, rhs->vec_chars->data); 
+}
+
+static inline
+bool rutil_string_eq(rutil_string* lhs,rutil_string* rhs){
+    return rutil_string_cmp(lhs, rhs) == 0 ? true : false;
+}
+
+
+static inline
+void rutil_string_free(rutil_string** string){
+    deleteVector_str(&(*string)->vec_chars);
+    free(*string);
+    *string = (rutil_string*)freed_ptr_address;
+}
+
+
 //rutil_monomorphized_vector(i32, i32)
 /*
 int main(){

@@ -2,6 +2,9 @@ use std::fmt::Write;
 use std::collections::HashMap;
 use std::collections::HashSet;
 
+
+//Todo: Object Model and Methods,closures,function types,higher order functions
+
 pub fn type_mangler(_type: &str) -> String{
     let mut mangled_type = String::new();
     for ch in _type.chars(){
@@ -111,8 +114,14 @@ impl RMapWriter{
             self.generate_rutil_map_function_create(unique_type_pair.0.as_str(), unique_type_pair.1.as_str());
             self.generate_rutil_map_function_put(unique_type_pair.0.as_str(), unique_type_pair.1.as_str());
             self.generate_rutil_map_function_get(unique_type_pair.0.as_str(), unique_type_pair.1.as_str());
+            self.generate_rutil_map_function_contains_key(unique_type_pair.0.as_str(), unique_type_pair.1.as_str());
+            self.generate_rutil_map_function_length(unique_type_pair.0.as_str(), unique_type_pair.1.as_str());
+            self.generate_rutil_map_function_is_empty(unique_type_pair.0.as_str(), unique_type_pair.1.as_str());
+            self.generate_rutil_map_function_clear(unique_type_pair.0.as_str(), unique_type_pair.1.as_str());
+            self.generate_rutil_map_function_remove(unique_type_pair.0.as_str(), unique_type_pair.1.as_str());
+            self.generate_rutil_map_function_print(unique_type_pair.0.as_str(), unique_type_pair.1.as_str());
+            self.generate_rutil_map_function_delete(unique_type_pair.0.as_str(), unique_type_pair.1.as_str());
         }
-
     }
     fn generate_rutil_map_struct(&mut self,key: &str,val: &str){
         let mkey = type_mangler(key);
@@ -164,16 +173,17 @@ impl RMapWriter{
             pushBack_{pair_typename}(self->hashtable[index],pair);
         }}").unwrap();
     }
-
+    //key,val refer to ctype
     fn generate_rutil_map_function_get(&mut self,key: &str,val: &str){
         let mkey = type_mangler(key);
         let mval= type_mangler(val);
         let hashing_strategy = Self::hash_index_code(key);
         let map_typename = RMap::write_map_type_name(key, val);
         let pair_typename = RMap::write_pair_type_name(key, val);
-        let comparator = self.generate_comparator_int(key,val);
+        let (comparator_body,comparator_fn) = self.comparator_strategy(key,val,key);
+        let collision_handler = Self::collision_handler(key);
 
-        writeln!(self.monomorphized_code,"{comparator}").unwrap();
+        writeln!(self.monomorphized_code,"{comparator_body}").unwrap();
 
         writeln!(self.monomorphized_code,"{val} {map_typename}_get({map_typename}* self,{key} key){{
             u64 index =  {hashing_strategy} % default_map_size;
@@ -185,37 +195,361 @@ impl RMapWriter{
                 return pair.val;
             }}
             else{{
-                sortVector_{pair_typename}(_bucket,comparator);
-                {pair_typename}* begin = vectorFront_{pair_typename}(_bucket);
-                {pair_typename}* end   = vectorBack_{pair_typename}(_bucket);
-                for({pair_typename}* i = begin ; i != end; ++i){{
-                    if(i->key == key){{
-                        return i->val;
-                    }}
+                sortVector_{pair_typename}(_bucket,{comparator_fn});
+                rutil_vec_for_each(idx, _bucket){{
+                    {collision_handler}
                 }}
+                return NULL;
             }}
         }}").unwrap();
     }
+
+    fn generate_rutil_map_function_contains_key(&mut self,key: &str,val: &str){
+        let mkey = type_mangler(key);
+        let mval= type_mangler(val);
+        let hashing_strategy = Self::hash_index_code(key);
+        let map_typename = RMap::write_map_type_name(key, val);
+        let pair_typename = RMap::write_pair_type_name(key, val);
+        let (comparator_body,comparator_fn) = self.comparator_strategy(key,val,key);
+        let collision_handler = Self::collision_handler(key);
+        let equality_strategy_0 = Self::trait_equality(key,"pair.key","key");
+        let equality_strategy_1 = Self::find_key_handler(key);
+
+        writeln!(self.monomorphized_code,"bool {map_typename}_contains_key({map_typename}* self,{key} key){{
+            u64 index =  {hashing_strategy} % default_map_size;
+            bucket* _bucket = self->hashtable[index];
+            if(_bucket -> length == 1){{
+                {pair_typename} pair = getAtIndex_{pair_typename}(_bucket,0);
+                if({equality_strategy_0}){{
+                    return true;
+                }}
+            }}
+            else{{
+                sortVector_{pair_typename}(_bucket,{comparator_fn});
+                rutil_vec_for_each(idx, _bucket){{
+                    {equality_strategy_1}
+                }}
+                return false;
+            }}
+    }}").unwrap();
+    }
+
+    fn generate_rutil_map_function_length(&mut self,key:  &str,val: &str){
+        let map_typename = RMap::write_map_type_name(key, val);
+
+        writeln!(self.monomorphized_code,"usize {map_typename}_length({map_typename}* self){{
+            usize map_length = 0;
+            usize array_length = rutil_array_length(self->hashtable);
+            for(usize idx = 0; idx < array_length; ++idx){{
+                map_length += self->hashtable[idx]->length;
+            }}
+            return map_length;
+        }}").unwrap();
+    }
+
+    fn generate_rutil_map_function_is_empty(&mut self,key: &str,val: &str){
+        let map_typename = RMap::write_map_type_name(key, val);
+
+        writeln!(self.monomorphized_code,"bool {map_typename}_is_empty({map_typename}* self){{
+            usize map_length = {map_typename}_length(self);
+            if(map_length == 0UL)
+                return true;
+            return false;
+        }}").unwrap();
+    }
+
+    fn generate_rutil_map_function_clear(&mut self,key: &str,val: &str){
+        let map_typename = RMap::write_map_type_name(key, val);
+        let pair_typename = RMap::write_pair_type_name(key, val);
+        
+        writeln!(self.monomorphized_code,"bool {map_typename}_clear({map_typename}* self){{
+            usize array_length = rutil_array_length(self->hashtable);
+            for(usize idx = 0; idx < array_length; ++idx){{
+                clearVector_{pair_typename}(self->hashtable[idx]);
+            }}
+        }}").unwrap();
+    }
+    
+    fn generate_rutil_map_function_print(&mut self,key: &str,val: &str){
+        let map_typename = RMap::write_map_type_name(key, val);
+        let pair_typename = RMap::write_pair_type_name(key, val);
+        let pair_printer_strategy = self.pair_printer(key, val);
+
+        let prettyprint_openbrace = format!("printf(\"%c \",'{{');");
+        let prettyprint_newline = format!("printf(\"%c\",'\\n');");
+        let prettyprint_closebrace = format!("printf(\"%c\",'}}');");
+        let prettyprint_comma = format!("printf(\"%c\",',');");
+
+        writeln!(self.monomorphized_code,"void {map_typename}_print({map_typename}* self){{
+            usize array_length = rutil_array_length(self->hashtable);
+            {prettyprint_openbrace}
+            for(usize idx = 0; idx < array_length; ++idx){{
+                bucket* _bucket = self->hashtable[idx];
+                rutil_vec_for_each(idx,_bucket){{
+                    {pair_typename} pair = getAtIndex_{pair_typename}(_bucket,idx);
+                    {pair_printer_strategy}
+                }}
+            }}
+            {prettyprint_closebrace}
+            {prettyprint_newline}
+        }}").unwrap();
+    }
+
+    fn generate_rutil_map_function_remove(&mut self,key: &str,val: &str){
+        let mkey = type_mangler(key);
+        let mval= type_mangler(val);
+        let hashing_strategy = Self::hash_index_code(key);
+        let map_typename = RMap::write_map_type_name(key, val);
+        let pair_typename = RMap::write_pair_type_name(key, val);
+        let (comparator_body,comparator_fn) = self.comparator_strategy(key,val,key);
+        let collision_handler = Self::collision_handler(key);
+        let equality_strategy_0 = Self::trait_equality(key,"pair.key","key");
+        let equality_strategy_1 = Self::find_key_handler(key);
+        let remove_handler = Self::remove_element_handler(key, val, val);
+
+        writeln!(self.monomorphized_code,"void {map_typename}_remove({map_typename}* self,{key} key){{
+            u64 index = {hashing_strategy} % default_map_size;            
+
+            bucket* _bucket = self->hashtable[index];
+            if(_bucket -> length == 1){{
+                (void)pop_{pair_typename}(_bucket,0);
+                return;
+            }}
+
+            else{{
+                rutil_vec_for_each(idx,_bucket){{
+                    {remove_handler}
+                    index++;
+                }}
+            }}
+        }}").unwrap();
+
+    }
+
+    fn generate_rutil_map_function_delete(&mut self,key: &str,val: &str) {
+        let map_typename = RMap::write_map_type_name(key, val);
+        let pair_typename = RMap::write_pair_type_name(key, val);
+        writeln!(self.monomorphized_code,"void {map_typename}_delete({map_typename}* self){{
+            usize array_length = rutil_array_length(self->hashtable);
+            for(usize idx = 0; idx < array_length; ++idx){{
+                deleteVector_{pair_typename}(&(self->hashtable[idx]));
+            }}
+        }}").unwrap();
+    }
+
+    fn pair_printer(&self,key: &str,val: &str) -> String{
+        let mut pair_print = String::new();
+
+        let mut fmtstr = String::new();
+        let mut fmtargs = String::new();
+
+        match key{
+            "rutil_string*" =>{
+                write!(fmtstr,"%s: ").unwrap();
+                write!(fmtargs,"pair.key->vec_chars->data").unwrap();
+                write!(pair_print,"%s,{}: ","pair.key->vec_chars->data").unwrap();
+                match val{
+                    "i8" | "i16" | "i32" | "i64" =>{
+                        write!(pair_print,"%ld,{}","pair.val").unwrap();
+                        write!(fmtstr,"%ld").unwrap();
+                        write!(fmtargs,",pair.val").unwrap();
+                    }
+                    "u8" | "u16" | "u32" | "u64" =>{
+                        write!(pair_print,"%lu,{}","pair.val").unwrap();
+                        write!(fmtstr,"%lu").unwrap();
+                        write!(fmtargs,",pair.val").unwrap();
+                    }
+                    "rutil_string*" =>{
+                        write!(pair_print,"%s,{}","pair.key->vec_chars->data").unwrap();
+                        write!(fmtstr,"%s").unwrap();
+                        write!(fmtargs,",pair.val->vec_chars->data").unwrap();
+                    }
+                    _ =>{
+                        panic!("Unimplemented Type");
+                    }
+                }
+            }
+            "u8 | u16 | u32 | u64" => {
+                write!(fmtstr,"%lu: ").unwrap();
+                write!(fmtargs,"pair.key").unwrap();
+                write!(pair_print,"%lu,{}: ","pair.key").unwrap();
+                match val{
+                    "i8" | "i16" | "i32" | "i64" =>{
+                        write!(pair_print,"%ld,{}","pair.val").unwrap();
+                        write!(fmtstr,"%ld").unwrap();
+                        write!(fmtargs,",pair.val").unwrap();
+                    }
+                    "u8" | "u16" | "u32" | "u64" =>{
+                        write!(pair_print,"%lu,{}","pair.val").unwrap();
+                        write!(fmtstr,"%lu").unwrap();
+                        write!(fmtargs,",pair.val").unwrap();
+                    }
+                    "rutil_string*" =>{
+                        write!(pair_print,"%s,{}","pair.key->vec_chars->data").unwrap();
+                        write!(fmtstr,"%s").unwrap();
+                        write!(fmtargs,",pair.val->vec_chars->data").unwrap();
+                    }
+                    _ =>{
+                        panic!("Unimplemented Type");
+                    }
+                }
+            }
+            "i8" | "i16" | "i32" | "i64" =>{
+                write!(fmtstr,"%ld: ").unwrap();
+                write!(fmtargs,"pair.key").unwrap();
+                write!(pair_print,"%ld,{}: ","pair.key").unwrap();
+                match val{
+                    "i8" | "i16" | "i32" | "i64" =>{
+                        write!(pair_print,"%ld,{}","pair.val").unwrap();
+                        write!(fmtstr,"%ld").unwrap();
+                        write!(fmtargs,",pair.val").unwrap();
+                    }
+                    "u8" | "u16" | "u32" | "u64" =>{
+                        write!(pair_print,"%lu,{}","pair.val").unwrap();
+                        write!(fmtstr,"%lu").unwrap();
+                        write!(fmtargs,",pair.val").unwrap();
+                    }
+                    "rutil_string*" =>{
+                        write!(pair_print,"%s,{}","pair.key->vec_chars->data").unwrap();
+                        write!(fmtstr,"%s").unwrap();
+                        write!(fmtargs,",pair.val->vec_chars->data").unwrap();
+                    }
+                    _ =>{
+                        panic!("Unimplemented Type");
+                    }
+                }
+            }
+            _ => {
+                panic!("Unsupported Type");
+            }
+        }
+        fmtstr.push(' ');
+        let cprintf = format!("printf(\"{}\",{});",fmtstr,fmtargs);
+        //let cprintf = format!("printf(\"{fmtstr}\",{fmtargs});");
+        cprintf
+    }
+
+
+    fn remove_element_handler(key: &str,val: &str,ctype: &str) -> String{
+        let mut rmh = String::new();
+        let pair_typename = RMap::write_pair_type_name(key, val);
+        
+        if ctype == "rutil_string*"{
+            write!(rmh,"u64 index = 0;
+            if(rutil_string_cmp(_bucket->data[idx].key,key) == 0){{
+                pop_{pair_typename}(_bucket,index);
+                return;
+            }}").unwrap();
+            return rmh;
+        }
+        else{
+            write!(rmh,"u64 index = 0;
+            if(_bucket->data[idx].key == key){{
+                pop_{pair_typename}(_bucket,index)
+            }}").unwrap();
+            return rmh;
+        }
+    }
+
+
+    fn find_key_handler(ctype: &str) -> String{
+        let mut key_search_handler = String::new();
+
+        if ctype == "rutil_string*"{
+            write!(key_search_handler,"if(rutil_string_cmp(_bucket->data[idx].key,key) == 0){{
+                        return true; 
+                    }}").unwrap();
+            return key_search_handler;
+        }
+        else{
+            write!(key_search_handler,"if(_bucket->data[idx].key == key){{
+                        return true;
+                    }}").unwrap();
+            return key_search_handler;
+        }
+    }
+
+    fn collision_handler(ctype: &str) -> String{
+        let mut collision_code = String::new();
+
+        if ctype == "rutil_string*"{
+            write!(collision_code,"if(rutil_string_cmp(_bucket->data[idx].key,key) == 0){{
+                        return _bucket->data[idx].val; 
+                    }}").unwrap();
+            return collision_code;
+        }
+        else{
+            write!(collision_code,"if(_bucket->data[idx].key == key){{
+                            return _bucket->data[idx].val;
+                        }}").unwrap();
+            return collision_code;
+        }
+    }
     fn hash_index_code(key: &str) -> String {
-        if key == "char*" || key == "const char*" {
-             "rutil_hash(key, strlen(key))".to_string()
-         }
-         else {
-             "rutil_hash(&key, sizeof(key))".to_string()
+        if key == "char*" || key == "const char*"{
+            "rutil_hash(key, strlen(key))".to_string()
+        }
+        else if key == "rutil_string*"{
+            "rutil_hash(key->vec_chars->data, strlen(key->vec_chars->data))".to_string()
+        }
+        else {
+            "rutil_hash(&key, sizeof(key))".to_string()
          }
      }
 
-    fn generate_comparator_int(&self,key: &str,val: &str) -> String{
+    //the ctype binds both lhs & rhs
+    fn trait_equality(ctype: &str,lhs: &str,rhs: &str) -> String{
+        if ctype == "rutil_string*"{ //string
+            return format!("rutil_string_eq({lhs},{rhs})");
+        } 
+        else{ //int,double,char
+            return format!("{lhs} == {rhs}");
+        }
+    }
+
+
+    //keys should be comparable, so they must implement behaviour/trait to compare them 
+    fn comparator_strategy(&self,key: &str,val :&str,ctype : &str) -> (String,String){
+        if ctype == "rutil_string*"{
+            return self.generate_trait_comparator_for_type_rstring(key, val);
+        }
+        else{
+            return self.generate_trait_comparator_numeric(key, val, ctype);
+        }
+    }   
+
+    fn generate_trait_comparator_for_type_rstring(&self,key: &str,val: &str) -> (String,String){
         let mut comparator = String::new();
         let pair_typename = RMap::write_pair_type_name(key, val);
 
-        writeln!(comparator,"int comparator(const void* lhs,const void* rhs){{
+        let comparator_fn = format!("rutil_cmprator_rstring");
+
+        writeln!(comparator,"int {comparator_fn}(const void* lhs,const void* rhs){{
+            {pair_typename} _lhs = *({pair_typename}*)lhs;
+            {pair_typename} _rhs = *({pair_typename}*)rhs;
+
+            rutil_string* _a = _lhs.key;
+            rutil_string* _b = _rhs.key;
+
+            return rutil_string_cmp(_a,_b);
+        }}").unwrap();
+        (comparator,comparator_fn)
+    }
+    //int,uint,double all sizes,char also supported
+    fn generate_trait_comparator_numeric(&self,key: &str,val: &str,ctype : &str) -> (String,String){
+        let mut comparator = String::new();
+        let pair_typename = RMap::write_pair_type_name(key, val);
+
+        let mut mctype = type_mangler(ctype);
+        let comparator_fn = format!("rutil_cmprator_{mctype}");
+
+        writeln!(comparator,"int {comparator_fn}(const void* lhs,const void* rhs){{
     
             {pair_typename} _lhs = *({pair_typename}*)lhs;
             {pair_typename} _rhs = *({pair_typename}*)rhs;
         
-            int _a = _lhs.val;
-            int _b = _rhs.val;
+            {ctype} _a = _lhs.key;
+            {ctype} _b = _rhs.key;
 
             if(_a > _b)
                 return 1;
@@ -224,8 +558,7 @@ impl RMapWriter{
             else 
                 return 0;
         }}").unwrap();
-
-        comparator
+        (comparator,comparator_fn)
     }
 
 }
