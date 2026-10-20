@@ -1,4 +1,4 @@
-use crate::codegen::RMapWriter;
+use crate::codegen::{RFunctionWriter, RMapWriter, RTableWriter};
 use crate::{lexer::Lexer};
 use std::io::Write;
 use std::{collections::HashMap, env::args};
@@ -7,6 +7,7 @@ mod lexer;
 mod _codegen;
 mod codegen;
 
+/* 
 fn main(){
     let mut rmapwriter = RMapWriter::default();
     rmapwriter.create_map("testmap", "char*", "char*");
@@ -14,6 +15,31 @@ fn main(){
     
     let mut cwriter = codegen::CCodeWriter::default();
     cwriter.write_c_source(&rmapwriter);
+
+    println!("{}",cwriter.csource);
+}*/
+
+fn main(){
+    let mut rtablewriter = RTableWriter::default();
+    rtablewriter.create_rtable("test_rt");
+
+    rtablewriter.write_rtable();
+
+    let mut rfuncwriter = RFunctionWriter::default();
+    rfuncwriter.create_function("add".to_owned(),false,vec![("a".to_owned(),"i32".to_owned()),("b".to_owned(),"i32".to_owned())],"i32".to_owned());
+    rfuncwriter.create_function("add".to_owned(),true,vec![("a".to_owned(),"i32".to_owned()),("b".to_owned(),"i32".to_owned())],"i32".to_owned());
+
+    rfuncwriter.write_functions();
+
+    let mut rmapwriter = RMapWriter::default();
+    rmapwriter.create_map("test_mp","const char*","i32");
+
+    rmapwriter.write_monomorphized_code();
+
+
+    let mut cwriter = codegen::CCodeWriter::default();
+
+    cwriter.write_c_source(&rmapwriter,&rtablewriter,&rfuncwriter);
 
     println!("{}",cwriter.csource);
 }

@@ -1,0 +1,69 @@
+let a = 10
+const b = 20
+global c = 30
+
+const who = "world"
+print("hello, #{who}!")
+
+fn add(x,y) x + y
+
+const user = {
+    name = "revo",
+    points = add(a,b),
+    bump = fn(self) self.points +=1,
+}
+print(user.points)
+const bumped = user |> fn(u) u:bump()
+print(user.points)
+
+
+let v = do/b
+    let x = 21
+    break/b(x + 4)
+end
+
+print(v)
+
+
+let arr = {1,5,3}
+let map = {k = 1}
+map.x = "yds"
+
+print({arr,map})
+
+let a = {
+    inner = 8,
+    ["inner"] = 10,
+    mutate = fn(self) self.inner *= 2,
+    helper = fn() "helped"
+}
+
+# print(a.inner)
+# print(a["inner"])
+# print(a.helper())
+# a:mutate()
+
+#for k in a:values()
+#print(k)
+
+
+a:push(4,5,6)
+print(a)
+
+
+let b = {
+    fn adder(x,y) x + y,
+    {1,2,3,4},
+    var = 122,
+    {7.903,3939},
+    mapkey = fn(self) self.var = 1,
+}
+
+fn adder(x,y) x - y
+
+b:mapkey()
+
+print(b)
+
+print(adder(3,232))
+print(b.adder(3,45))

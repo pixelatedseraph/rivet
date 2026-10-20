@@ -497,7 +497,7 @@ void rutil_string_free(rutil_string** string){
 }
 
 static inline
-bool rutil_cstring_eq(char* lhs,char* rhs){
+bool rutil_cstring_eq(const char* lhs,const char* rhs){
     return strcmp(lhs, rhs) == 0 ? true : false;
 }
 

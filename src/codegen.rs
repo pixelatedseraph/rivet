@@ -30,9 +30,20 @@ pub struct CCodeWriter{
 
 impl CCodeWriter{
 
+    /*
     pub fn write_c_source(&mut self,mapwriter: &RMapWriter){
         self.generate_c_headers();
         self.append_rmap_definitions(mapwriter);
+        self.generate_c_main();
+        self.generate_c_main_return();
+    }
+    */
+
+    pub fn write_c_source(&mut self,mapwriter:&RMapWriter,tablewriter: &RTableWriter,funcwriter:&RFunctionWriter){
+        self.generate_c_headers();
+        self.append_rmap_definitions(mapwriter);
+        self.append_rtable_defintions(tablewriter);
+        self.append_func_definitions(funcwriter);
         self.generate_c_main();
         self.generate_c_main_return();
     }
@@ -47,9 +58,19 @@ impl CCodeWriter{
         ").unwrap();
     }
 
+    fn append_rtable_defintions(&mut self,tablewriter: &RTableWriter){
+        let rtable_definitions = &tablewriter.table_defintions;
+        writeln!(self.csource,"{rtable_definitions}").unwrap();
+    }
+
     fn append_rmap_definitions(&mut self,mapwriter:&RMapWriter){
         let rmap_definitions = &mapwriter.monomorphized_code;
         writeln!(self.csource,"{rmap_definitions}").unwrap();
+    }
+
+    fn append_func_definitions(&mut self,funcwriter: &RFunctionWriter){
+        let fndefs = &funcwriter.defintions;
+        writeln!(self.csource,"{fndefs}").unwrap();
     }
     
 
@@ -700,4 +721,187 @@ impl RMapWriter{
         }}").unwrap();
         (comparator,comparator_fn)
     }
+}
+
+type FunctionParameters = Vec<(String,String)>; //vector of tuples of parameter name and type
+//ex add(a: int,b: int) -> Vec<(a,int),(b,int)>  
+
+#[derive(Debug,Default)]
+pub struct RFunction{
+    name: String,
+    is_method: bool,
+    parameters : FunctionParameters,
+    return_expr_type: String,
+}
+
+impl RFunction{
+    fn new(name: String,
+        is_method: bool,
+        parameters: FunctionParameters,
+        return_expr_type: String) 
+        -> Self
+    {
+        Self { name, is_method, parameters, return_expr_type }
+    }
+}
+
+#[derive(Debug,Default)]
+pub struct RFunctionWriter{
+    functions: Vec<RFunction>,
+    defintions: String,
+    body:  String,
+}
+
+impl RFunctionWriter{
+    pub fn create_function(
+        &mut self,
+        name: String,
+        is_method: bool,
+        parameters: FunctionParameters,
+        return_expr_type: String)
+    {
+        let func = RFunction::new(name, is_method, parameters, return_expr_type);
+        self.functions.push(func);
+    }
+
+    fn mangle(function : &RFunction) -> String{
+        let mut mangled_function = String::from("_Z");
+        if function.is_method == true{
+            mangled_function.push('T');
+        }
+        else {
+            mangled_function.push('F');
+        }
+        let fn_name = &function.name;
+        let fn_argc = *(&function.parameters.len());
+        let fn_first_param_type = &function.parameters[0].1;
+        let mut fn_label = String::new();
+        let fn_return_expr = &function.return_expr_type;
+
+        let is_phi_fn = *&function.parameters.first().map_or(true, |first| {
+            *&function.parameters.iter().all(|t| t.1 == first.1)
+        });
+
+        if is_phi_fn == true{
+            write!(fn_label,"phi").unwrap();
+        }
+        else{
+            write!(fn_label,"sgm").unwrap();
+        }
+        write!(mangled_function,"{fn_name}_ac{fn_argc}_{fn_first_param_type}_{fn_label}_{fn_return_expr}").unwrap();
+
+        mangled_function
+    }
+
+
+    pub fn write_functions(&mut self) {
+        for func in self.functions.iter(){
+            let cfn = Self::generate_cfunc(func);
+            write!(self.defintions,"{cfn}").unwrap();
+        }
+    }
+
+    fn generate_cfunc(func: &RFunction) -> String{
+        let mut cfunc = String::new();
+        let mangled_cfn_name = Self::mangle(func);
+
+        let fn_ret_type = &func.return_expr_type;
+
+        write!(cfunc,"{fn_ret_type} {mangled_cfn_name}(").unwrap();
+
+        for (i,params) in func.parameters.iter().enumerate(){
+            let pname = &params.0;
+            let ptype = &params.1;
+
+            if i > 0{
+                write!(cfunc, ", ").unwrap();
+            }
+            write!(cfunc,"{ptype} {pname}").unwrap();
+        }
+
+        writeln!(cfunc,"); ").unwrap();
+        cfunc
+    }
+
+}
+
+
+#[derive(Debug,Default)]
+pub struct RTable{
+    name: String,
+}
+
+#[derive(Debug,Default)]
+pub struct RTableWriter{
+    tables: Vec<RTable>,
+    table_defintions: String
+}
+
+impl RTableWriter{
+    pub fn create_rtable(&mut self,name: &str){
+        let mut rt = RTable{name: name.to_owned()};
+        self.tables.push(rt);
+    }
+
+    pub fn write_rtable(&mut self){
+        self.generate_rtable_unit_struct();
+        self.generate_rtable_unit_create();
+        self.generate_rtable_unit_create_with();
+        self.generate_rtable_unit_init_with();
+        self.generate_rtable_unit_delete();
+        self.generate_rtable();
+        self.generate_rtable_iterator();
+    }
+
+    fn generate_rtable_unit_struct(&mut self){
+        writeln!(self.table_defintions,"typedef struct{{
+            void* data;
+        }}RTableUnit;").unwrap();
+    }
+
+    fn generate_rtable_unit_create(&mut self){
+        writeln!(self.table_defintions,"static inline
+            RTableUnit* newRTableUnit(){{
+            RTableUnit* rtunit = malloc(sizeof(RTableUnit));
+            return rtunit;
+        }}").unwrap();
+    }
+
+    fn generate_rtable_unit_create_with(&mut self){
+        writeln!(self.table_defintions,"static inline
+            RTableUnit* newRTableUnitWith(void* data){{
+            RTableUnit* rtunit = newRTableUnit();
+            rtunit->data = data;
+            return rtunit;
+        }}").unwrap();
+    }
+
+    fn generate_rtable_unit_init_with(&mut self){
+        writeln!(self.table_defintions,"static inline
+            void initRTableUnitWith(RTableUnit* rtunit,void* data){{
+            rtunit->data = data;
+        }}").unwrap();
+    }
+
+     fn generate_rtable_unit_delete(&mut self){
+        writeln!(self.table_defintions,"static inline
+            void deleteRTableUnit(RTableUnit** rtunit){{
+            free(*rtunit);
+            *rtunit = NULL;
+        }}").unwrap();
+    }
+
+    fn generate_rtable(&mut self){
+        writeln!(self.table_defintions,"rutil_monomorphized_vector(RTableUnit*,RtableUnitPtr)
+            typedef rutil_vector_RtableUnitPtr RTable; ").unwrap();
+    }
+
+    fn generate_rtable_iterator(&mut self){
+        writeln!(self.table_defintions,"#define rutil_rtable_for_each(rt,itr)   \\
+                RTableUnit** begin = vectorFront_RtableUnitPtr((rt));   \\
+                RTableUnit** end = vectorBack_RtableUnitPtr((rt));      \\
+                for(RTableUnit** itr = begin; itr != end ; ++itr)       \\
+        ").unwrap();
+    }
+
 }
