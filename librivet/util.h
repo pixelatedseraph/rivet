@@ -35,6 +35,8 @@ typedef int32_t    i32;
 typedef int64_t    i64;
 typedef i64        isize ;
 
+typedef float  f32;
+typedef double f64;
 
 const u64 freed_ptr_address = 0xdeadbeef;
 
@@ -494,6 +496,10 @@ void rutil_string_free(rutil_string** string){
     *string = (rutil_string*)freed_ptr_address;
 }
 
+static inline
+bool rutil_cstring_eq(char* lhs,char* rhs){
+    return strcmp(lhs, rhs) == 0 ? true : false;
+}
 
 //rutil_monomorphized_vector(i32, i32)
 /*
